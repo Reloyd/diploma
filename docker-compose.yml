@@ -1,0 +1,138 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: phonoteka_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-phonoteka}
+      POSTGRES_USER: ${POSTGRES_USER:-phonoteka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-phonoteka_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-phonoteka}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: phonoteka_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: phonoteka_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: phonoteka_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-phonoteka}:${POSTGRES_PASSWORD:-phonoteka_pass}@postgres:5432/${POSTGRES_DB:-phonoteka}
+      DATABASE_SYNC_URL: postgresql://${POSTGRES_USER:-phonoteka}:${POSTGRES_PASSWORD:-phonoteka_pass}@postgres:5432/${POSTGRES_DB:-phonoteka}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET_AUDIO: audio
+      MINIO_BUCKET_COVERS: covers
+      SECRET_KEY: ${SECRET_KEY:-super-secret-key-change-in-production}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-mock}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
+      GROQ_API_KEY: ${GROQ_API_KEY:-mock}
+      ML_WORKER_URL: http://ml-worker:8001
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:80,https://abc123.ngrok-free.app"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: phonoteka_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+  ml-worker:
+    build:
+      context: ./ml-worker
+      dockerfile: Dockerfile
+    container_name: phonoteka_ml_worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-phonoteka}:${POSTGRES_PASSWORD:-phonoteka_pass}@postgres:5432/${POSTGRES_DB:-phonoteka}
+      DATABASE_SYNC_URL: postgresql://${POSTGRES_USER:-phonoteka}:${POSTGRES_PASSWORD:-phonoteka_pass}@postgres:5432/${POSTGRES_DB:-phonoteka}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET_AUDIO: audio
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./ml-worker:/app
+      - audio_tmp:/tmp/audio
+    command: >
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8001 &
+             celery -A app.worker:celery_app worker --loglevel=info --concurrency=2 -Q ml"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: phonoteka_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  minio_data:
+  audio_tmp:
