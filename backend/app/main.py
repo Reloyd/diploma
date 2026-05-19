@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine
-from app.routers import auth, tracks, library, events, recommendations, playlists
+from app.routers import auth, tracks, library, events, recommendations, playlists, stats
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app.include_router(library.router)
 app.include_router(events.router)
 app.include_router(recommendations.router)
 app.include_router(playlists.router)
+app.include_router(stats.router)
 
 
 @app.get("/health")

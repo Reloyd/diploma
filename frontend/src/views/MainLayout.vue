@@ -13,6 +13,7 @@
         <NavLink to="/playlists" icon="🎶">Плейлисты</NavLink>
         <NavLink to="/recommendations" icon="✨">Рекомендации</NavLink>
         <NavLink to="/assistant" icon="🤖">ИИ-ассистент</NavLink>
+        <NavLink to="/stats" icon="📊">Статистика</NavLink>
       </nav>
 
       <div class="p-4 border-t border-slate-800">

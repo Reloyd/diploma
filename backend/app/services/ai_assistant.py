@@ -23,6 +23,7 @@ SYSTEM_PROMPT = """You are a music playlist assistant. Given a user request in a
 extract structured parameters and return ONLY valid JSON.
 Output format:
 {
+  "title": "string (short catchy playlist name, 2-5 words, in the user's language)",
   "context": "work|rest|sport|general",
   "genre": "string or null",
   "tempo_min": number_or_null,
@@ -30,7 +31,7 @@ Output format:
   "energy_min": number_or_null (0-1),
   "energy_max": number_or_null (0-1),
   "valence_min": number_or_null (0-1),
-  "explanation": "string (human-readable, in the user's language)"
+  "explanation": "string (1-2 sentences, human-readable, in the user's language)"
 }"""
 
 
@@ -123,7 +124,14 @@ def _mock_claude_response(prompt: str, context: str) -> dict:
             genre = g
             break
 
+    title_map = {
+        "sport": "Энергия и драйв",
+        "work": "Фокус и поток",
+        "rest": "Спокойный вечер",
+        "general": "Моя подборка",
+    }
     return {
+        "title": (genre + " микс") if genre else title_map.get(ctx, "Моя подборка"),
         "context": ctx,
         "genre": genre,
         "tempo_min": tempo_min,
@@ -132,7 +140,6 @@ def _mock_claude_response(prompt: str, context: str) -> dict:
         "energy_max": energy_max,
         "valence_min": None,
         "explanation": f"Подобрал треки по вашему запросу: «{prompt}». "
-                       f"Контекст: {ctx}. "
                        + (f"Жанр: {genre}. " if genre else "")
                        + "Приятного прослушивания!",
     }
@@ -221,10 +228,9 @@ async def create_ai_playlist(
     params = await _call_ai(prompt, context)
     explanation = params.pop("explanation", "Плейлист создан ИИ-ассистентом.")
     resolved_context = params.pop("context", context)
+    title = params.pop("title", None) or f"AI: {prompt[:40]}"
 
     tracks = await _select_tracks(db, user_id, params, limit=20)
-
-    title = f"AI: {prompt[:50]}"
     pl = Playlist(
         user_id=user_id,
         title=title,

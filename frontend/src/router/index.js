@@ -15,6 +15,7 @@ const routes = [
       { path: 'playlists/:id', component: () => import('@/views/PlaylistDetailView.vue') },
       { path: 'recommendations', component: () => import('@/views/RecommendationsView.vue') },
       { path: 'assistant', component: () => import('@/views/AssistantView.vue') },
+      { path: 'stats', component: () => import('@/views/StatsView.vue') },
       { path: 'artists/:id', component: () => import('@/views/ArtistView.vue') },
       { path: 'albums/:id', component: () => import('@/views/AlbumView.vue') },
     ]

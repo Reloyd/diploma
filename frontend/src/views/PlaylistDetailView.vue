@@ -58,9 +58,24 @@
       Плейлист пуст — добавьте треки через кнопку выше
     </div>
     <div v-else class="space-y-1">
-      <div v-for="pt in playlist.tracks" :key="pt.track.id"
-           class="flex items-center gap-2">
-        <span class="text-slate-600 text-sm w-6 text-right flex-shrink-0">{{ pt.position + 1 }}</span>
+      <div v-for="(pt, index) in sortedTracks" :key="pt.track.id"
+           draggable="true"
+           @dragstart="onDragStart(index)"
+           @dragover.prevent="onDragOver(index)"
+           @dragend="onDragEnd"
+           :class="[
+             'flex items-center gap-2 rounded-xl transition-all select-none',
+             dragOverIndex === index && draggedIndex !== index
+               ? 'ring-2 ring-brand-500 ring-offset-1 ring-offset-transparent'
+               : '',
+             draggedIndex === index ? 'opacity-40' : 'opacity-100',
+           ]">
+        <!-- Drag handle -->
+        <div class="text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing
+                    flex-shrink-0 px-1 py-3 touch-none select-none text-lg leading-none">
+          ⠿
+        </div>
+        <span class="text-slate-600 text-sm w-5 text-right flex-shrink-0">{{ index + 1 }}</span>
         <TrackCard :track="pt.track" :queue="trackList" class="flex-1" />
         <button @click="removeTrack(pt.track.id)"
           class="text-slate-600 hover:text-red-400 transition text-sm flex-shrink-0 px-2">✕</button>
@@ -114,7 +129,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { playlistsAPI, tracksAPI } from '@/api'
 import { usePlayerStore } from '@/stores/player'
@@ -124,6 +139,45 @@ const route = useRoute()
 const router = useRouter()
 const player = usePlayerStore()
 const playlist = ref(null)
+
+// Drag and drop
+const sortedTracks = ref([])
+const draggedIndex = ref(null)
+const dragOverIndex = ref(null)
+
+watch(() => playlist.value?.tracks, (tracks) => {
+  if (tracks) sortedTracks.value = [...tracks].sort((a, b) => a.position - b.position)
+}, { immediate: true })
+
+function onDragStart(index) {
+  draggedIndex.value = index
+}
+
+function onDragOver(index) {
+  if (draggedIndex.value === null || draggedIndex.value === index) return
+  dragOverIndex.value = index
+  // Live reorder preview
+  const items = [...sortedTracks.value]
+  const dragged = items.splice(draggedIndex.value, 1)[0]
+  items.splice(index, 0, dragged)
+  sortedTracks.value = items
+  draggedIndex.value = index
+}
+
+async function onDragEnd() {
+  draggedIndex.value = null
+  dragOverIndex.value = null
+  // Save new order to backend
+  const trackIds = sortedTracks.value.map(pt => pt.track.id)
+  try {
+    await playlistsAPI.reorder(route.params.id, trackIds)
+    // Update positions locally
+    sortedTracks.value.forEach((pt, i) => { pt.position = i })
+  } catch (e) {
+    console.error('reorder error', e)
+    await load() // rollback on error
+  }
+}
 
 // Edit state
 const editing = ref(false)
@@ -137,7 +191,7 @@ const searchResults = ref([])
 const addLoading = ref(false)
 let searchTimer = null
 
-const trackList = computed(() => playlist.value?.tracks.map(pt => pt.track) || [])
+const trackList = computed(() => sortedTracks.value.map(pt => pt.track))
 const playlistTrackIds = computed(() => new Set(playlist.value?.tracks.map(pt => pt.track.id) || []))
 
 function alreadyInPlaylist(trackId) {

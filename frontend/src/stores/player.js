@@ -77,7 +77,10 @@ export const usePlayerStore = defineStore('player', () => {
 
   function skipTrack() {
     _recordEvent(true)
-    next()
+    if (currentIndex.value < queue.value.length - 1) {
+      currentIndex.value++
+      eventStartTime = Date.now()
+    }
   }
 
   function _recordEvent(skipped) {
@@ -112,10 +115,14 @@ export const usePlayerStore = defineStore('player', () => {
     }).catch(() => {})
   }
 
+  function recordCurrent() {
+    _recordEvent(false)
+  }
+
   return {
     queue, currentIndex, currentTrack, isPlaying,
     currentTime, duration, volume, context,
     playTrack, playQueue, togglePlay, next, prev,
-    onEnded, onTimeUpdate, skipTrack, likeCurrentTrack,
+    onEnded, onTimeUpdate, skipTrack, likeCurrentTrack, recordCurrent,
   }
 })

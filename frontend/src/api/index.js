@@ -55,14 +55,23 @@ export const playlistsAPI = {
   create: (data) => api.post('/playlists', data),
   update: (id, data) => api.patch(`/playlists/${id}`, data),
   delete: (id) => api.delete(`/playlists/${id}`),
+  reorder: (plId, trackIds) => api.patch(`/playlists/${plId}/reorder`, trackIds),
   addTrack: (plId, trackId) => api.post(`/playlists/${plId}/tracks/${trackId}`),
   removeTrack: (plId, trackId) => api.delete(`/playlists/${plId}/tracks/${trackId}`),
+  previewAI: (data) => api.post('/playlists/ai/preview', data),
   createAI: (data) => api.post('/playlists/ai/create', data),
 }
 
 // --- Events ---
 export const eventsAPI = {
   record: (data) => api.post('/events', data),
+}
+
+// --- Stats ---
+export const statsAPI = {
+  get: () => api.get('/stats', {
+    params: { tz: Intl.DateTimeFormat().resolvedOptions().timeZone }
+  }),
 }
 
 // --- Recommendations ---

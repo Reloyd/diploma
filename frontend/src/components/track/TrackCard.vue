@@ -29,6 +29,48 @@
     <!-- Duration + actions -->
     <div class="flex items-center gap-2 ml-auto">
       <span class="text-xs text-slate-500">{{ formatDuration(track.duration_sec) }}</span>
+
+      <!-- Add to playlist button -->
+      <div class="relative" @click.stop>
+        <button @click="togglePlaylistMenu"
+          class="text-slate-500 hover:text-white transition text-base opacity-0 group-hover:opacity-100 px-1"
+          title="Добавить в плейлист">
+          ⊕
+        </button>
+
+        <!-- Dropdown -->
+        <div v-if="showPlaylistMenu"
+             class="absolute right-0 bottom-full mb-1 bg-slate-800 border border-slate-700 rounded-xl
+                    shadow-2xl z-50 min-w-48 py-1 overflow-hidden">
+          <div class="px-3 py-2 text-xs text-slate-500 border-b border-slate-700">
+            Добавить в плейлист
+          </div>
+          <div v-if="loadingPlaylists" class="px-3 py-2 text-xs text-slate-400">
+            Загрузка...
+          </div>
+          <div v-else-if="!playlists.length" class="px-3 py-2 text-xs text-slate-400">
+            Нет плейлистов
+          </div>
+          <div v-else class="max-h-48 overflow-y-auto">
+            <button v-for="pl in playlists" :key="pl.id"
+              @click="addToPlaylist(pl)"
+              class="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700
+                     hover:text-white transition flex items-center gap-2">
+              <span class="text-base">{{ contextIcon(pl.context) }}</span>
+              <span class="truncate flex-1">{{ pl.title }}</span>
+              <span v-if="addedTo === pl.id" class="text-green-400 text-xs flex-shrink-0">✓</span>
+            </button>
+          </div>
+          <div class="border-t border-slate-700 px-3 py-2">
+            <router-link to="/playlists" @click="showPlaylistMenu = false"
+              class="text-xs text-brand-400 hover:text-brand-300 transition">
+              + Создать новый плейлист
+            </router-link>
+          </div>
+        </div>
+      </div>
+
+      <!-- Library button -->
       <button v-if="showLibrary" @click.stop="toggleLibrary"
         :class="track.in_library ? 'text-brand-400' : 'text-slate-500 hover:text-white'"
         class="transition text-sm">{{ track.in_library ? '♥' : '♡' }}</button>
@@ -37,9 +79,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
-import { libraryAPI } from '@/api'
+import { libraryAPI, playlistsAPI } from '@/api'
 
 const props = defineProps({
   track: { type: Object, required: true },
@@ -52,6 +94,50 @@ const player = usePlayerStore()
 const isPlaying = computed(() =>
   player.currentTrack?.id === props.track.id && player.isPlaying
 )
+
+// Playlist menu
+const showPlaylistMenu = ref(false)
+const playlists = ref([])
+const loadingPlaylists = ref(false)
+const addedTo = ref(null)
+
+async function togglePlaylistMenu() {
+  if (showPlaylistMenu.value) {
+    showPlaylistMenu.value = false
+    return
+  }
+  showPlaylistMenu.value = true
+  addedTo.value = null
+  if (!playlists.value.length) {
+    loadingPlaylists.value = true
+    try {
+      const { data } = await playlistsAPI.list()
+      playlists.value = data
+    } catch (e) {}
+    finally { loadingPlaylists.value = false }
+  }
+}
+
+async function addToPlaylist(pl) {
+  try {
+    await playlistsAPI.addTrack(pl.id, props.track.id)
+    addedTo.value = pl.id
+    setTimeout(() => { showPlaylistMenu.value = false; addedTo.value = null }, 800)
+  } catch (e) {
+    console.error('addToPlaylist error', e)
+  }
+}
+
+function contextIcon(ctx) {
+  return { work: '💻', rest: '🌙', sport: '🏋️', general: '🎵' }[ctx] || '🎵'
+}
+
+// Close menu on outside click
+function onOutsideClick(e) {
+  if (showPlaylistMenu.value) showPlaylistMenu.value = false
+}
+onMounted(() => document.addEventListener('click', onOutsideClick))
+onUnmounted(() => document.removeEventListener('click', onOutsideClick))
 
 function play() {
   player.playTrack(props.track, props.queue)

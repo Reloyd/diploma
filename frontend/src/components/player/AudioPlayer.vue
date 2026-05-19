@@ -33,7 +33,7 @@
           class="w-10 h-10 bg-brand-600 hover:bg-brand-700 rounded-full flex items-center justify-center transition text-white">
           {{ player.isPlaying ? '⏸' : '▶' }}
         </button>
-        <button @click="player.next()" class="text-slate-400 hover:text-white transition text-xl">⏭</button>
+        <button @click="player.skipTrack()" class="text-slate-400 hover:text-white transition text-xl">⏭</button>
       </div>
 
       <!-- Time + Volume -->
@@ -60,12 +60,21 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { libraryAPI } from '@/api'
 
 const player = usePlayerStore()
 const audioEl = ref(null)
+
+function onBeforeUnload() {
+  if (player.currentTrack && player.isPlaying) {
+    player.recordCurrent()
+  }
+}
+
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onUnmounted(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
 async function toggleLike() {
   const track = player.currentTrack
